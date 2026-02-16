@@ -91,24 +91,30 @@ export const generateSpeech = async ({ text, voiceName, language }: GenerateSpee
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
   
   let languageInstruction = "";
-  if (language === 'hi') languageInstruction = "Speak in pure Hindi with clear pronunciation.";
-  else if (language === 'ja') languageInstruction = "Speak in Japanese with authentic anime emotional cadence.";
-  else if (language === 'hinglish') languageInstruction = "Speak in Hinglish (a mix of Hindi and English) like a cool urban ninja.";
-  else languageInstruction = "Speak in clear, energetic English.";
+  if (language === 'hi') languageInstruction = "Perform in pure Hindi.";
+  else if (language === 'ja') languageInstruction = "Perform in authentic Japanese.";
+  else if (language === 'hinglish') languageInstruction = "Perform in casual Hinglish.";
+  else languageInstruction = "Perform in high-energy English.";
 
-  // Enhanced prompt to handle emotional tags
+  // Special Naruto-style instruction if Kore is selected
+  const characterProfile = voiceName === 'Kore' 
+    ? "Character: A high-energy teenage ninja. Tone: Raspy, determined, youthful, and slightly scratchy. Think 'Uzumaki' spirit." 
+    : "Character: Dramatic anime male archetype.";
+
   const prompt = `
     System Instruction:
-    - You are a highly expressive anime voice actor performing a male character.
-    - Character profile: Raspy, teenage, passionate, high energy.
-    - Language: ${languageInstruction}
-    - Emotional Control: Interpret tags in square brackets like [laugh], [serious], [angry], [sad], [whisper], [shout], or [silent] as performance cues. 
-    - When you see [laugh], perform an audible laugh (e.g., "Hahaha!").
-    - When you see [serious], lower your pitch and speak with cold determination.
-    - When you see [silent], add a small pause.
-    - Be extremely theatrical and stay in character.
+    - Role: Professional Anime Voice Actor.
+    - ${characterProfile}
+    - Language Context: ${languageInstruction}
+    - Performance Cues: 
+      [laugh] = A hearty, character-specific laugh.
+      [serious] = Lower pitch, cold determination, slow pacing.
+      [angry] = Sharp, loud, shouting with intensity.
+      [sad] = Quavering voice, softer, emotional.
+      [whisper] = Close to the mic, breathy, secretive.
+      [silent] = A distinct pause in narration.
     
-    The script to perform is:
+    Perform the following script with maximum theatrical energy:
     ${text}
   `;
 
@@ -127,7 +133,7 @@ export const generateSpeech = async ({ text, voiceName, language }: GenerateSpee
     });
 
     const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    if (!base64Audio) throw new Error("No audio data returned");
+    if (!base64Audio) throw new Error("Synthesis empty");
 
     const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
     const audioBytes = decode(base64Audio);
@@ -138,7 +144,7 @@ export const generateSpeech = async ({ text, voiceName, language }: GenerateSpee
 
     return { audioBuffer, audioContext, audioUrl };
   } catch (error) {
-    console.error("TTS Generation Error:", error);
+    console.error("TTS Node Failure:", error);
     throw error;
   }
 };

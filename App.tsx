@@ -19,19 +19,21 @@ import {
   Volume1,
   Angry,
   ShieldCheck,
-  Infinity
+  Infinity,
+  Wifi,
+  Wind
 } from 'lucide-react';
-import { generateSpeech } from './services/ttsService';
-import { VOICE_OPTIONS, LANGUAGE_OPTIONS, NINJA_PHRASES } from './constants';
-import { SpeechHistoryItem } from './types';
+import { generateSpeech } from './services/ttsService.ts';
+import { VOICE_OPTIONS, LANGUAGE_OPTIONS, NINJA_PHRASES } from './constants.ts';
+import { SpeechHistoryItem } from './types.ts';
 
 const EMOTIONS = [
+  { label: 'Determined', tag: '[serious]', icon: <Sword size={14} />, color: 'bg-orange-500/10 text-orange-400 border-orange-500/20' },
   { label: 'Laugh', tag: '[laugh]', icon: <Smile size={14} />, color: 'bg-green-500/10 text-green-400 border-green-500/20' },
-  { label: 'Serious', tag: '[serious]', icon: <Volume1 size={14} />, color: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
   { label: 'Angry', tag: '[angry]', icon: <Angry size={14} />, color: 'bg-red-500/10 text-red-400 border-red-500/20' },
   { label: 'Whisper', tag: '[whisper]', icon: <Mic size={14} />, color: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
-  { label: 'Silent', tag: '[silent]', icon: <VolumeX size={14} />, color: 'bg-slate-500/10 text-slate-400 border-slate-500/20' },
-  { label: 'Sad', tag: '[sad]', icon: <Frown size={14} />, color: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' }
+  { label: 'Sad', tag: '[sad]', icon: <Frown size={14} />, color: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' },
+  { label: 'Silent', tag: '[silent]', icon: <VolumeX size={14} />, color: 'bg-slate-500/10 text-slate-400 border-slate-500/20' }
 ];
 
 const App: React.FC = () => {
@@ -42,26 +44,31 @@ const App: React.FC = () => {
   const [history, setHistory] = useState<SpeechHistoryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showIntro, setShowIntro] = useState(true);
+  const [logoError, setLogoError] = useState(false);
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem('riser_tts_history');
-    if (saved) {
-      try {
+    try {
+      const saved = localStorage.getItem('riser_tts_history');
+      if (saved) {
         const parsed = JSON.parse(saved);
-        setHistory(parsed.map((item: any) => ({ ...item, audioBlobUrl: '' })));
-      } catch (e) {
-        console.error("Failed to parse history");
+        if (Array.isArray(parsed)) {
+          setHistory(parsed.map((item: any) => ({ ...item, audioBlobUrl: '' })));
+        }
       }
+    } catch (e) {
+      console.warn("History inaccessible");
     }
   }, []);
 
   const saveHistory = (newHistory: SpeechHistoryItem[]) => {
     setHistory(newHistory);
-    const metaHistory = newHistory.map(({ audioBlobUrl, ...rest }) => rest);
-    localStorage.setItem('riser_tts_history', JSON.stringify(metaHistory));
+    try {
+      const metaHistory = newHistory.map(({ audioBlobUrl, ...rest }) => rest);
+      localStorage.setItem('riser_tts_history', JSON.stringify(metaHistory.slice(0, 20)));
+    } catch (e) {}
   };
 
   const handleGenerate = async () => {
@@ -80,7 +87,7 @@ const App: React.FC = () => {
       audioContextRef.current = audioContext;
       
       if (currentSourceRef.current) {
-        currentSourceRef.current.stop();
+        try { currentSourceRef.current.stop(); } catch(e) {}
       }
 
       const source = audioContext.createBufferSource();
@@ -101,7 +108,7 @@ const App: React.FC = () => {
       saveHistory([newItem, ...history]);
       
     } catch (err: any) {
-      setError(err.message || "Synthesis failed. Please verify your connection.");
+      setError("Chakra connection interrupted. Please try again.");
     } finally {
       setIsGenerating(false);
     }
@@ -110,137 +117,140 @@ const App: React.FC = () => {
   const playFromHistory = (item: SpeechHistoryItem) => {
     if (!item.audioBlobUrl) return;
     const audio = new Audio(item.audioBlobUrl);
-    audio.play();
+    audio.play().catch(() => setError("Cache cleared. Re-generate to play."));
   };
 
   const downloadItem = (item: SpeechHistoryItem) => {
     if (!item.audioBlobUrl) return;
     const link = document.createElement('a');
     link.href = item.audioBlobUrl;
-    link.download = `riser_voice_${item.id.slice(0, 8)}.wav`;
+    link.download = `riser_voice.wav`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  };
-
-  const deleteHistoryItem = (id: string) => {
-    saveHistory(history.filter(item => item.id !== id));
   };
 
   const insertTag = (tag: string) => {
     setInputText(prev => prev + (prev && !prev.endsWith(' ') ? ' ' : '') + tag + ' ');
   };
 
+  const LogoComponent = ({ className = "" }: { className?: string }) => (
+    <div className={`relative ${className}`}>
+      {!logoError ? (
+        <img 
+          src="logo.png" 
+          alt="Riser Logo" 
+          className="w-full h-full object-contain" 
+          onError={() => setLogoError(true)} 
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-orange-600 to-orange-400 rounded-3xl shadow-lg border border-white/20">
+          <span className="text-white font-black text-6xl">R</span>
+        </div>
+      )}
+    </div>
+  );
+
   return (
-    <div className="min-h-screen pb-12 bg-[#0b0f1a] selection:bg-orange-500/40 text-slate-200">
+    <div className="min-h-screen pb-12 bg-[#050810] selection:bg-orange-500/40 text-slate-200">
       {/* Intro Modal */}
       {showIntro && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md p-4">
-          <div className="bg-[#121d2f] border border-slate-700/50 rounded-[3rem] p-12 max-w-md w-full shadow-[0_0_80px_-15px_rgba(249,115,22,0.4)] text-center space-y-10 animate-in fade-in zoom-in duration-500">
-            <div className="relative mx-auto w-36 h-36 flex items-center justify-center">
-              <div className="absolute inset-0 bg-orange-600/10 blur-[60px] rounded-full scale-150 animate-pulse"></div>
-              <img src="logo.png" alt="Riser Logo" className="w-full h-full object-contain relative z-10 drop-shadow-[0_15px_35px_rgba(0,0,0,0.5)]" onError={(e) => {
-                e.currentTarget.style.display = 'none';
-                e.currentTarget.parentElement?.insertAdjacentHTML('beforeend', '<div class="text-6xl font-black text-orange-500">R</div>');
-              }} />
-            </div>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/98 backdrop-blur-lg p-4">
+          <div className="bg-[#0b1221] border border-white/5 rounded-[3rem] p-12 max-w-md w-full shadow-[0_0_120px_-20px_rgba(249,115,22,0.4)] text-center space-y-10 animate-in fade-in zoom-in duration-500">
+            <LogoComponent className="w-36 h-36 mx-auto" />
             <div>
-              <h2 className="text-5xl font-anime text-white mb-3 tracking-wider">Riser.TTS</h2>
-              <p className="text-slate-400 font-bold tracking-[0.15em] flex items-center justify-center gap-2 uppercase text-xs">
-                <ShieldCheck size={16} className="text-orange-500" />
-                Riser Corporation Company
+              <h2 className="text-6xl font-anime text-white mb-2 tracking-widest uppercase">Riser.TTS</h2>
+              <p className="text-slate-500 font-black tracking-[0.3em] flex items-center justify-center gap-2 uppercase text-[9px]">
+                <ShieldCheck size={14} className="text-orange-500" />
+                RISER CORPORATION ENTERPRISE
               </p>
             </div>
-            <p className="text-slate-300 text-sm leading-relaxed font-semibold">
-              The world's premier <strong>Unlimited Use</strong> Anime Synthesis Engine. 
-              Zero limits. Infinite creativity. 
+            <p className="text-slate-300 text-sm leading-relaxed font-bold">
+              The only <span className="text-orange-500">Unlimited Chakra</span> Voice Synthesis Engine in the world. 
+              Believe it!
             </p>
-            <div className="flex gap-3">
-              <div className="flex-1 bg-orange-500/5 border border-orange-500/20 p-4 rounded-3xl text-orange-400 text-[11px] font-black uppercase tracking-[0.25em] flex flex-col items-center justify-center gap-2">
-                <Infinity size={24} className="mb-1" /> UNLIMITED
+            <div className="flex gap-4">
+              <div className="flex-1 bg-white/5 border border-white/10 p-4 rounded-3xl text-orange-400 text-[10px] font-black uppercase tracking-[0.2em] flex flex-col items-center justify-center gap-2">
+                <Infinity size={24} /> 100% FREE
               </div>
-              <div className="flex-1 bg-slate-800/20 border border-slate-700/50 p-4 rounded-3xl text-slate-400 text-[11px] font-black uppercase tracking-[0.25em] flex flex-col items-center justify-center gap-2">
-                <Flame size={24} className="mb-1" /> CHAKRA
+              <div className="flex-1 bg-white/5 border border-white/10 p-4 rounded-3xl text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] flex flex-col items-center justify-center gap-2">
+                <Zap size={24} /> NO LIMITS
               </div>
             </div>
             <button 
               onClick={() => setShowIntro(false)}
-              className="w-full py-6 bg-gradient-to-r from-orange-600 to-orange-400 text-white font-black text-xl rounded-3xl transition-all shadow-[0_15px_40px_-10px_rgba(249,115,22,0.6)] active:scale-95 uppercase tracking-[0.2em] hover:brightness-110"
+              className="w-full py-6 bg-gradient-to-r from-orange-700 to-orange-500 text-white font-black text-xl rounded-[1.5rem] transition-all shadow-2xl active:scale-95 uppercase tracking-widest hover:brightness-110"
             >
-              INITIATE SYSTEM
+              IGNITE CHAKRA
             </button>
           </div>
         </div>
       )}
 
       {/* Header */}
-      <header className="bg-[#0f172a] pt-12 pb-20 px-4 shadow-[0_10px_40px_-15px_rgba(0,0,0,0.5)] mb-[-4rem] relative z-10 overflow-hidden border-b border-white/5">
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-orange-600/5 blur-[120px] rounded-full -mr-64 -mt-64"></div>
-        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-blue-600/5 blur-[120px] rounded-full -ml-48 -mb-48"></div>
-
+      <header className="bg-[#090e1a] pt-16 pb-28 px-4 shadow-[0_15px_60px_-15px_rgba(0,0,0,0.8)] mb-[-6rem] relative z-10 border-b border-white/5">
         <div className="max-w-6xl mx-auto flex flex-col items-center text-center relative z-20">
-          <div className="flex items-center gap-8 mb-6">
-             <img src="logo.png" alt="Riser Logo" className="w-20 h-20 md:w-28 md:h-28 object-contain drop-shadow-[0_0_20px_rgba(249,115,22,0.4)] hover:scale-110 transition-transform duration-500 cursor-pointer" onError={(e) => {
-                e.currentTarget.style.display = 'none';
-                e.currentTarget.parentElement?.insertAdjacentHTML('beforeend', '<div class="text-5xl font-black text-orange-500">R</div>');
-             }} />
-             <div className="text-left border-l border-white/10 pl-8">
-                <h1 className="text-7xl md:text-9xl font-anime text-transparent bg-clip-text bg-gradient-to-br from-white via-orange-400 to-orange-700 leading-none tracking-tight">
+          <div className="flex items-center gap-12 mb-10 flex-col md:flex-row">
+             <LogoComponent className="w-28 h-28 md:w-36 md:h-36 drop-shadow-[0_0_30px_rgba(249,115,22,0.6)]" />
+             <div className="text-left border-l-0 md:border-l-4 border-orange-500/40 md:pl-12 text-center md:text-left">
+                <h1 className="text-8xl md:text-[11rem] font-anime text-transparent bg-clip-text bg-gradient-to-br from-white via-orange-400 to-orange-700 leading-none tracking-tighter filter drop-shadow-2xl">
                   Riser.TTS
                 </h1>
-                <p className="text-slate-500 text-[10px] font-black tracking-[0.5em] uppercase mt-3 opacity-60">
-                  RISER CORPORATION NEURAL ENGINE
-                </p>
+                <div className="flex items-center justify-center md:justify-start gap-4 mt-4">
+                  <span className="text-slate-600 text-[10px] font-black tracking-[0.6em] uppercase">
+                    NEURAL ENGINE V2.5.FLASH
+                  </span>
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 rounded-full border border-green-500/20">
+                    <Wifi size={10} className="text-green-500" />
+                    <span className="text-[9px] font-black text-green-500 uppercase tracking-widest">Active</span>
+                  </div>
+                </div>
              </div>
           </div>
           
-          <div className="flex items-center gap-6 mt-4">
-            <div className="h-[2px] w-16 bg-gradient-to-r from-transparent to-slate-800"></div>
-            <div className="inline-flex items-center gap-3 bg-black/40 backdrop-blur-xl px-8 py-3 rounded-full text-[11px] font-black text-orange-400 border border-white/5 tracking-[0.3em] uppercase shadow-2xl">
-              <Sparkles size={14} className="text-yellow-400 animate-pulse" />
-              100% Unlimited Free Use
-            </div>
-            <div className="h-[2px] w-16 bg-gradient-to-l from-transparent to-slate-800"></div>
+          <div className="inline-flex items-center gap-4 bg-black/60 backdrop-blur-3xl px-14 py-5 rounded-full text-[12px] font-black text-orange-400 border border-white/10 tracking-[0.4em] uppercase shadow-3xl transform hover:scale-105 transition-transform">
+            <Sparkles size={18} className="text-yellow-400 animate-pulse" />
+            UNLIMITED CHAKRA PROTOCOL ENABLED
           </div>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 relative z-20">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+      <main className="max-w-7xl mx-auto px-10 relative z-20">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
           
-          <div className="lg:col-span-8 space-y-10">
-            {/* Main Input Area */}
-            <section className="bg-[#121d2f]/60 backdrop-blur-3xl rounded-[3rem] p-10 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.5)] border border-white/5">
-              <div className="flex justify-between items-center mb-8 flex-wrap gap-4">
-                <label className="text-[11px] font-black text-slate-500 uppercase tracking-[0.3em] flex items-center gap-3">
-                  <div className="w-2.5 h-2.5 bg-orange-500 rounded-full shadow-[0_0_10px_#f97316] animate-pulse"></div>
-                  Synthesis Script
+          <div className="lg:col-span-8 space-y-12">
+            {/* Input Script Area */}
+            <section className="bg-[#111827]/80 backdrop-blur-3xl rounded-[4rem] p-12 shadow-2xl border border-white/5 ring-1 ring-white/10">
+              <div className="flex justify-between items-center mb-10 flex-wrap gap-8">
+                <label className="text-[12px] font-black text-slate-500 uppercase tracking-[0.5em] flex items-center gap-4">
+                  <div className="w-3.5 h-3.5 bg-orange-600 rounded-full shadow-[0_0_20px_#f97316] animate-pulse"></div>
+                  Neural Input Script
                 </label>
-                <div className="flex gap-1.5 p-1.5 bg-black/30 rounded-2xl border border-white/5 overflow-x-auto no-scrollbar">
+                <div className="flex gap-2.5 p-2 bg-black/50 rounded-3xl border border-white/5 shadow-inner">
                   {LANGUAGE_OPTIONS.map(lang => (
                     <button
                       key={lang.id}
                       onClick={() => setSelectedLanguage(lang.id)}
-                      className={`px-4 py-2.5 rounded-xl text-[10px] font-black border transition-all flex items-center gap-2.5 flex-shrink-0 ${
+                      className={`px-6 py-3.5 rounded-2xl text-[11px] font-black border transition-all flex items-center gap-3 ${
                         selectedLanguage === lang.id 
-                          ? 'bg-orange-600 border-orange-500 text-white shadow-[0_5px_15px_-5px_rgba(249,115,22,0.5)]' 
+                          ? 'bg-orange-600 border-orange-500 text-white shadow-xl' 
                           : 'bg-transparent border-transparent text-slate-600 hover:text-slate-300'
                       }`}
                     >
-                      <span className="text-lg">{lang.flag}</span>
+                      <span className="text-xl">{lang.flag}</span>
                       <span className="uppercase">{lang.name}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Emotions Bar */}
-              <div className="mb-6 flex flex-wrap gap-2.5">
+              {/* Performance Tags */}
+              <div className="mb-10 flex flex-wrap gap-3">
                 {EMOTIONS.map(emo => (
                   <button
                     key={emo.tag}
                     onClick={() => insertTag(emo.tag)}
-                    className={`flex items-center gap-2.5 px-5 py-3 rounded-2xl text-[10px] font-black border transition-all active:scale-95 uppercase tracking-wider hover:brightness-150 shadow-sm ${emo.color}`}
+                    className={`flex items-center gap-3 px-7 py-4 rounded-[1.8rem] text-[11px] font-black border transition-all active:scale-95 uppercase tracking-widest hover:brightness-150 shadow-2xl ${emo.color}`}
                   >
                     {emo.icon}
                     {emo.label}
@@ -248,34 +258,34 @@ const App: React.FC = () => {
                 ))}
               </div>
               
-              <div className="relative group">
+              <div className="relative group rounded-[3rem] overflow-hidden shadow-[inset_0_2px_10px_rgba(0,0,0,0.5)] bg-black/40">
                 <textarea
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value.slice(0, 1000))}
-                  placeholder="Enter script here... use [laugh] for character joy or [serious] for cold fury!"
-                  className="w-full h-56 bg-black/40 text-white rounded-[2rem] p-8 border border-white/5 focus:border-orange-500/30 focus:ring-0 transition-all resize-none text-2xl font-medium leading-relaxed placeholder:text-slate-800 shadow-inner custom-scrollbar"
+                  placeholder="Paste your script here... use [serious] for ninja focus or [laugh] for Uzumaki joy!"
+                  className="w-full h-72 bg-transparent text-white p-12 focus:ring-0 border-none transition-all resize-none text-2xl font-semibold leading-relaxed placeholder:text-slate-800 custom-scrollbar"
                 />
-                <div className="absolute bottom-6 right-8 text-[10px] font-black text-slate-700 tracking-widest uppercase">
-                  {inputText.length} / 1000
+                <div className="absolute bottom-10 right-12 text-[11px] font-black text-slate-700 tracking-widest uppercase bg-black/60 px-4 py-1.5 rounded-xl border border-white/5">
+                  {inputText.length} / 1000 CHAKRA UNITS
                 </div>
               </div>
 
-              <div className="mt-6 flex flex-wrap gap-3">
+              <div className="mt-10 flex flex-wrap gap-4">
                 {NINJA_PHRASES.map(phrase => (
                   <button
                     key={phrase}
                     onClick={() => insertTag(phrase)}
-                    className="bg-slate-800/10 hover:bg-orange-500/10 hover:text-orange-400 text-slate-600 text-[10px] py-2 px-5 rounded-full border border-white/5 transition-all uppercase font-black tracking-widest active:scale-95"
+                    className="bg-slate-800/20 hover:bg-orange-600/20 hover:text-orange-400 text-slate-600 text-[11px] py-3 px-8 rounded-full border border-white/5 transition-all uppercase font-black tracking-widest active:scale-95"
                   >
-                    <Zap size={12} className="text-orange-500 mr-1" />
+                    <Wind size={14} className="text-orange-500 mr-2" />
                     {phrase}
                   </button>
                 ))}
               </div>
 
               {error && (
-                <div className="mt-6 p-5 bg-red-500/5 border border-red-500/20 text-red-400 text-xs font-bold rounded-2xl flex items-center gap-4">
-                  <div className="p-1.5 bg-red-500 rounded-lg shadow-lg shadow-red-500/20"><Info size={16} className="text-white" /></div>
+                <div className="mt-10 p-8 bg-red-600/5 border border-red-600/20 text-red-400 text-sm font-bold rounded-[2.5rem] flex items-center gap-6 animate-pulse">
+                  <div className="p-3 bg-red-600 rounded-2xl shadow-lg"><Info size={24} className="text-white" /></div>
                   {error}
                 </div>
               )}
@@ -283,53 +293,53 @@ const App: React.FC = () => {
               <button
                 onClick={handleGenerate}
                 disabled={isGenerating || !inputText.trim()}
-                className={`w-full mt-10 py-6 rounded-[2rem] flex items-center justify-center gap-4 text-3xl font-anime transition-all shadow-2xl active:scale-[0.98] tracking-[0.2em] ${
+                className={`w-full mt-14 py-10 rounded-[2.5rem] flex items-center justify-center gap-6 text-5xl font-anime transition-all shadow-3xl active:scale-[0.98] tracking-[0.2em] ${
                   isGenerating 
-                    ? 'bg-slate-800 text-slate-600 cursor-not-allowed opacity-50' 
-                    : 'bg-gradient-to-r from-orange-700 to-orange-500 text-white hover:from-orange-600 hover:to-orange-400 hover:shadow-orange-600/40'
+                    ? 'bg-slate-800 text-slate-600 cursor-not-allowed' 
+                    : 'bg-gradient-to-r from-orange-700 to-orange-500 text-white hover:brightness-110 hover:shadow-orange-600/60'
                 }`}
               >
                 {isGenerating ? (
-                  <div className="flex items-center gap-4 uppercase font-black text-sm tracking-[0.3em]">
-                    <div className="w-6 h-6 border-[5px] border-white/10 border-t-white rounded-full animate-spin" />
-                    Neural Channeling...
+                  <div className="flex items-center gap-6 uppercase font-black text-xl tracking-[0.4em]">
+                    <div className="w-10 h-10 border-[8px] border-white/10 border-t-white rounded-full animate-spin" />
+                    CHANNELING...
                   </div>
                 ) : (
                   <>
-                    <Sword className="rotate-45" size={32} />
-                    GENERATE VOICE
+                    <Sword className="rotate-45" size={48} />
+                    INVOKE VOICE
                   </>
                 )}
               </button>
             </section>
 
-            {/* Voice Selection */}
-            <section className="bg-[#121d2f]/60 backdrop-blur-3xl rounded-[3rem] p-10 shadow-2xl border border-white/5">
-              <label className="text-[11px] font-black text-slate-500 uppercase tracking-[0.3em] mb-8 block flex items-center gap-3">
-                <Globe size={18} className="text-orange-500" />
-                Select Neural Voice Profile
+            {/* Profile Selection */}
+            <section className="bg-[#111827]/80 backdrop-blur-3xl rounded-[4rem] p-12 shadow-2xl border border-white/5">
+              <label className="text-[13px] font-black text-slate-500 uppercase tracking-[0.5em] mb-12 block flex items-center gap-5">
+                <Globe size={24} className="text-orange-500" />
+                Select Neural Profile
               </label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {VOICE_OPTIONS.map((voice) => (
                   <button
                     key={voice.id}
                     onClick={() => setSelectedVoice(voice.id)}
-                    className={`p-6 rounded-[2.5rem] border transition-all text-left flex items-center gap-5 group ${
+                    className={`p-10 rounded-[3.5rem] border-2 transition-all text-left flex items-center gap-8 group ${
                       selectedVoice === voice.id 
-                        ? 'bg-orange-600/10 border-orange-500/40 text-white shadow-[0_15px_30px_-10px_rgba(249,115,22,0.4)]' 
-                        : 'bg-black/20 border-white/5 text-slate-600 hover:border-white/10'
+                        ? 'bg-orange-600/10 border-orange-500 text-white shadow-[0_25px_50px_-10px_rgba(249,115,22,0.4)]' 
+                        : 'bg-black/40 border-white/5 text-slate-600 hover:border-white/20'
                     }`}
                   >
-                    <div className={`p-4 rounded-3xl transition-all shadow-xl ${
+                    <div className={`p-6 rounded-[2.2rem] transition-all shadow-2xl ${
                       selectedVoice === voice.id ? 'bg-orange-600 text-white scale-110' : 'bg-slate-800 group-hover:bg-slate-700'
                     }`}>
-                      <Volume2 size={24} />
+                      <Volume2 size={36} />
                     </div>
                     <div>
-                      <div className={`font-black text-base mb-1 uppercase tracking-wider ${selectedVoice === voice.id ? 'text-white' : 'text-slate-400'}`}>
+                      <div className={`font-black text-xl mb-1.5 uppercase tracking-wider ${selectedVoice === voice.id ? 'text-white' : 'text-slate-400'}`}>
                         {voice.name}
                       </div>
-                      <div className="text-[10px] opacity-40 leading-tight uppercase font-black tracking-[0.15em]">
+                      <div className="text-[11px] opacity-40 leading-tight uppercase font-black tracking-[0.2em]">
                         {voice.description}
                       </div>
                     </div>
@@ -339,86 +349,61 @@ const App: React.FC = () => {
             </section>
           </div>
 
-          {/* History Sidebar */}
-          <div className="lg:col-span-4 space-y-10">
-            <section className="bg-[#121d2f]/60 backdrop-blur-3xl rounded-[3rem] p-10 shadow-2xl border border-white/5 h-full max-h-[900px] flex flex-col">
-              <div className="flex items-center justify-between mb-10">
-                <div className="flex items-center gap-4">
-                   <div className="p-3 bg-orange-600/10 rounded-2xl border border-orange-600/20 shadow-inner">
-                      <History size={24} className="text-orange-500" />
+          {/* Legacy Sidebar */}
+          <div className="lg:col-span-4 space-y-12">
+            <section className="bg-[#111827]/80 backdrop-blur-3xl rounded-[4rem] p-12 shadow-2xl border border-white/5 h-full max-h-[1100px] flex flex-col">
+              <div className="flex items-center justify-between mb-12">
+                <div className="flex items-center gap-6">
+                   <div className="p-5 bg-orange-600/10 rounded-3xl border border-orange-600/20 shadow-inner">
+                      <History size={32} className="text-orange-500" />
                    </div>
-                   <h3 className="font-anime text-4xl text-white tracking-widest">
+                   <h3 className="font-anime text-6xl text-white tracking-[0.1em] uppercase">
                     Legacy
                   </h3>
                 </div>
                 <button 
                   onClick={() => saveHistory([])}
-                  className="text-slate-800 hover:text-red-500 transition-all p-3 rounded-2xl hover:bg-red-500/10"
-                  title="Clear Records"
+                  className="text-slate-800 hover:text-red-500 transition-all p-4 rounded-2xl hover:bg-red-500/10"
                 >
-                  <Trash2 size={24} />
+                  <Trash2 size={32} />
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto space-y-6 pr-3 custom-scrollbar">
+              <div className="flex-1 overflow-y-auto space-y-10 pr-4 custom-scrollbar">
                 {history.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-slate-900 py-48 space-y-6">
-                    <VolumeX size={80} className="opacity-5" />
-                    <p className="text-center italic text-[11px] uppercase font-black tracking-[0.3em] opacity-20">Memory Bank Empty</p>
+                  <div className="h-full flex flex-col items-center justify-center text-slate-900 py-64 space-y-10">
+                    <VolumeX size={120} className="opacity-5" />
+                    <p className="text-center italic text-[14px] uppercase font-black tracking-[0.5em] opacity-20">Voice Scrolls Empty</p>
                   </div>
                 ) : (
                   history.map((item) => (
                     <div 
                       key={item.id}
-                      className="bg-black/30 rounded-[2rem] p-6 border border-white/5 group relative hover:border-orange-500/30 transition-all shadow-xl"
+                      className="bg-black/50 rounded-[3rem] p-10 border border-white/5 group relative hover:border-orange-500/40 transition-all shadow-3xl"
                     >
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex gap-2 items-center">
-                          <span className="text-[9px] font-black text-orange-500 uppercase tracking-widest bg-orange-500/10 px-3 py-1.5 rounded-xl border border-orange-500/20">
-                            {item.voice}
-                          </span>
-                          <span className="text-[9px] font-black text-slate-500 bg-slate-800/40 px-3 py-1.5 rounded-xl border border-white/5">
-                            {LANGUAGE_OPTIONS.find(l => l.id === item.language)?.flag} {item.language.toUpperCase()}
-                          </span>
+                      <div className="flex justify-between items-start mb-8">
+                        <span className="text-[11px] font-black text-orange-500 uppercase tracking-widest bg-orange-500/10 px-5 py-2.5 rounded-2xl border border-orange-500/20">
+                          {item.voice}
+                        </span>
+                        <div className="flex gap-4">
+                           <button 
+                              onClick={() => downloadItem(item)}
+                              className="text-slate-700 hover:text-white transition-all"
+                            >
+                              <Download size={22} />
+                            </button>
                         </div>
-                        <button 
-                          onClick={() => deleteHistoryItem(item.id)}
-                          className="opacity-0 group-hover:opacity-100 text-slate-800 hover:text-red-500 transition-all p-1.5"
-                        >
-                          <Trash2 size={18} />
-                        </button>
                       </div>
-                      <p className="text-slate-300 text-xs line-clamp-3 mb-5 font-semibold italic leading-relaxed tracking-wide">
+                      <p className="text-slate-400 text-base line-clamp-4 mb-10 font-bold italic leading-relaxed tracking-wide opacity-90">
                         "{item.text}"
                       </p>
-                      <div className="flex items-center justify-between pt-4 border-t border-white/5">
-                        <span className="text-[9px] text-slate-700 uppercase font-black tracking-[0.2em]">
-                          {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                        
-                        <div className="flex gap-3">
-                          {item.audioBlobUrl ? (
-                            <>
-                              <button 
-                                onClick={() => downloadItem(item)}
-                                className="text-slate-600 hover:text-white p-2.5 bg-white/5 rounded-xl transition-all hover:bg-white/10"
-                                title="Download WAV"
-                              >
-                                <Download size={18} />
-                              </button>
-                              <button 
-                                onClick={() => playFromHistory(item)}
-                                className="text-white bg-orange-600 hover:bg-orange-500 px-6 py-2.5 rounded-2xl text-[11px] font-black uppercase tracking-widest flex items-center gap-2.5 transition-all shadow-[0_8px_20px_-5px_rgba(249,115,22,0.4)]"
-                              >
-                                <Play size={16} fill="currentColor" />
-                                PLAY
-                              </button>
-                            </>
-                          ) : (
-                            <span className="text-[9px] text-slate-800 font-black uppercase tracking-[0.2em] py-2">Cache Purged</span>
-                          )}
-                        </div>
-                      </div>
+                      <button 
+                        onClick={() => playFromHistory(item)}
+                        className="w-full text-white bg-orange-600 hover:bg-orange-500 py-4 rounded-[1.5rem] text-[13px] font-black uppercase tracking-widest flex items-center justify-center gap-4 transition-all shadow-xl"
+                      >
+                        <Play size={20} fill="currentColor" />
+                        REPLAY
+                      </button>
                     </div>
                   ))
                 )}
@@ -428,52 +413,30 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      <footer className="max-w-6xl mx-auto px-6 mt-24 text-center flex flex-col items-center gap-8 opacity-40 hover:opacity-100 transition-opacity duration-700">
-        <div className="flex items-center gap-6">
-           <img src="logo.png" alt="Riser Logo Footer" className="w-12 h-12 object-contain grayscale brightness-50 contrast-125 opacity-30" onError={(e) => {
-              e.currentTarget.style.display = 'none';
-              e.currentTarget.parentElement?.insertAdjacentHTML('beforeend', '<div class="text-xl font-black text-slate-700">R</div>');
-           }} />
-           <div className="text-left border-l border-white/5 pl-6">
-              <p className="text-[12px] font-black text-slate-600 uppercase tracking-[0.5em]">Riser.TTS Synthesis Node</p>
-              <p className="text-[9px] font-black text-slate-800 uppercase tracking-[0.3em] mt-1">A Riser Corporation Production • Emotional Core v2.2</p>
+      <footer className="max-w-7xl mx-auto px-10 mt-40 text-center flex flex-col items-center gap-12 opacity-40 hover:opacity-100 transition-opacity duration-1000">
+        <div className="flex items-center gap-12">
+           <LogoComponent className="w-20 h-20 grayscale brightness-50 contrast-125 opacity-30 hover:grayscale-0 hover:opacity-100 transition-all cursor-pointer" />
+           <div className="text-left border-l-2 border-white/5 pl-12">
+              <p className="text-[16px] font-black text-slate-500 uppercase tracking-[0.7em]">Riser.TTS Neural Interface</p>
+              <p className="text-[11px] font-black text-slate-800 uppercase tracking-[0.5em] mt-3">RISER CORPORATION COMPANY • UNLIMITED PROTOCOL V2.5</p>
            </div>
         </div>
-        <div className="h-[1px] w-48 bg-gradient-to-r from-transparent via-slate-900 to-transparent"></div>
-        <div className="space-y-2">
-          <p className="text-[10px] text-slate-700 uppercase font-black tracking-[0.4em]">Unlimited Access Protocol Enabled</p>
-          <p className="text-[8px] text-slate-800 uppercase font-bold tracking-[0.2em]">© {new Date().getFullYear()} Riser Corporation. All Rights Reserved.</p>
+        <div className="h-[2px] w-96 bg-gradient-to-r from-transparent via-slate-900 to-transparent"></div>
+        <div className="space-y-4">
+          <p className="text-[13px] text-slate-700 uppercase font-black tracking-[0.6em] animate-pulse-soft">Global Unlimited Free-Access Core Active</p>
+          <p className="text-[10px] text-slate-900 uppercase font-black tracking-[0.4em]">© {new Date().getFullYear()} RISER CORPORATION COMPANY. ALL RIGHTS RESERVED.</p>
         </div>
       </footer>
 
       <style>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 5px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #1e293b;
-          border-radius: 20px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #f97316;
-        }
-        .no-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-        .no-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-        @keyframes pulse-soft {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.7; }
-        }
-        .animate-pulse-soft {
-          animation: pulse-soft 3s infinite;
-        }
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 40px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #f97316; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        @keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .animate-pulse-soft { animation: pulse-soft 5s infinite; }
       `}</style>
     </div>
   );

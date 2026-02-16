@@ -1,5 +1,5 @@
 
-import { VoiceOption, LanguageOption } from './types';
+import { VoiceOption, LanguageOption } from './types.ts';
 
 export const VOICE_OPTIONS: VoiceOption[] = [
   { 
